@@ -33,6 +33,6 @@ module RequireFaster
   end
 end
 require 'require_faster/cache'
-RequireFaster.activate! # if (ENV['RUBYOPTS'] || '') =~ /-rrequire_faster/
-$stderr.puts "loading #{__FILE__}: DONE"
+RequireFaster.activate! if (ENV['RUBYOPT'] || '') =~ /-rrequire_faster/
+# $stderr.puts "loading #{__FILE__}: DONE"
 
