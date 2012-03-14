@@ -2,7 +2,7 @@ require 'require_faster'
 require 'thread'
 
 module RequireFaster
-  DEBUG = (ENV['RequireFaster_DEBUG'] || 0).to_i > 0
+  DEBUG = (ENV['RequireFaster_DEBUG'] || 0).to_i
 
   module PathWatcher
     def self.activate!
@@ -21,7 +21,7 @@ module RequireFaster
                ].map do | name |
                     <<"END"
 def #{name} *args, &blk
-  $stderr.puts " ### $: #{name}" if DEBUG
+  $stderr.puts " ### $: #{name} \#{args.inspect}" if DEBUG >= 1
   Cache.search_path_changed!
   super(*args, &blk)
 end
@@ -82,7 +82,7 @@ END
     end
 
     def _find_in_search_path name
-      $stderr.puts "  ### __find_in_search_path #{name.inspect}" if DEBUG
+      $stderr.puts "  ### __find_in_search_path #{name.inspect}" if DEBUG >= 2
       case name
       when %r{\A/}
         fullpath = name
@@ -96,7 +96,7 @@ END
               fullpath = try
               break
             end
-            $stderr.puts "  # try #{try.inspect}" if DEBUG
+            $stderr.puts "  # try #{try.inspect}" if DEBUG >= 3
           end
           break if fullpath
         end
@@ -109,7 +109,11 @@ END
       (
         @cache_readable_[path.freeze] ||=
         [
-          ::File.readable?(path)
+          (
+            x = ::File.readable?(path)
+            $stderr.puts "  # readable? #{path.inspect}" if DEBUG >= 1
+            x
+            )
         ]
         ).first
     end
@@ -118,7 +122,7 @@ END
       @cache_abs_path[path.freeze] ||=
         (
         x = ::File.expand_path(path)
-        $stderr.puts "abs_path #{path.inspect} => #{x.inspect}" if DEBUG
+        $stderr.puts "abs_path #{path.inspect} => #{x.inspect}" if DEBUG >= 2
         x
         )
     end
