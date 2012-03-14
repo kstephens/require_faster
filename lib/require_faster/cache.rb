@@ -69,7 +69,7 @@ END
 
     def initialize
       @cache_find_in_search_path = { }
-      @cache_readable_ = { }
+      @cache_readable_file_ = { }
       @cache_abs_path = { }
     end
 
@@ -93,7 +93,7 @@ END
         @search_path.each do | dir |
           dir = abs_path(dir)
           SUFFIXES.each do | suf |
-            if readable?(try = "#{dir}/#{name}#{suf}")
+            if readable_file?(try = "#{dir}/#{name}#{suf}")
               fullpath = try
               break
             end
@@ -106,13 +106,14 @@ END
     end
     SUFFIXES = [ '', '.rb', '.so' ].map!{|x| x.freeze}.freeze
 
-    def readable? path
+    def readable_file? path
       (
-        @cache_readable_[path.freeze] ||=
+        @cache_readable_file_[path.freeze] ||=
         [
           (
-            x = ::File.readable?(path)
-            $stderr.puts "  # readable? #{path.inspect}" if DEBUG >= 1
+            s = ::File.stat(path) rescue nil
+            x = s && s.file? && s.readable?
+            $stderr.puts "  # RF: readable_file? #{path.inspect} => #{x.inspect}" if DEBUG >= 2
             x
             )
         ]
