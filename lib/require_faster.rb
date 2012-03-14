@@ -13,7 +13,8 @@ module RequireFaster
     self
   end
 
-  LOADED = { }
+  LOADED_PATH = { }
+  LOADED_NAME = { }
   LOADED_MUTEX = Mutex.new
 
   def self.activate_Kernel!
@@ -24,13 +25,23 @@ module RequireFaster
         unless path
           raise LoadError, "no such file to load -- #{name}"
         end
-        do_load = 
+        do_load = false
         LOADED_MUTEX.synchronize do
-          unless LOADED[path]
-            LOADED[path] = name
+          unless LOADED_PATH[path] or LOADED_NAME[name]
+            LOADED_PATH[path] = name
+            LOADED_NAME[name] = path
+            # Do not load, if it was required before require_faster was activated.
+            do_load = ! ($".include?(name) || $".include?(path))
           end
         end
-        do_load and require_without_require_faster(path) # => true
+        if do_load
+          $stderr.puts "  # RF: require_faster #{name.inspect}\n  #   path #{path.inspect}" if DEBUG >=1
+          $stderr.puts "  #   from #{caller * "\n       "}" if DEBUG >= 2
+          require_without_require_faster(path) # => true
+          $".push(name)
+        else
+          false
+        end
       end
       alias :require_without_require_faster :require
       alias :require :require_faster
