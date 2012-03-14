@@ -18,6 +18,9 @@ module RequireFaster
                  :[]=,
                  :delete,
                  :delete_if,
+                 :replace,
+                 :insert,
+                 :map!,
                ].map do | name |
                     <<"END"
 def #{name} *args, &blk
