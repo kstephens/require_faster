@@ -1,0 +1,10 @@
+
+$ cd example
+
+$ ruby ex01.rb
+
+.vs.
+
+$ RUBYOPTS='-I../lib -rrequire_faster' ruby ex01.rb
+
+
