@@ -45,22 +45,28 @@ END
     end
 
     def self.instance
-      INSTANCE[Thread.current] ||= self.new
+      Thread.current[:'RequireFaster::Cache.instance'] ||=
+        THREADS_MUTEX.synchronize do
+          x = self.new
+          THREADS[Thread.current] = x
+          x
+        end
     end
-    INSTANCE = { }
+    THREADS = { }
+    THREADS_MUTEX = Mutex.new
 
     MUTEX_1 = Mutex.new
     def self.invalidate_search_path_cache!
-      MUTEX_1.synchronize do
+      THREADS_MUTEX.synchronize do
         dead_threads = [ ]
-        INSTANCE.each do | thread, cache |
+        THREADS.each do | thread, cache |
           if thread.alive?
             dead_threads << thread
           else
             cache.search_path_changed!
           end
         end
-        dead_threads.each { | t | INSTANCE.delete(t) }
+        dead_threads.each { | t | THREADS.delete(t) }
       end
       self
     end
