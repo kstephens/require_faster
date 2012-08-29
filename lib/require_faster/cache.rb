@@ -4,27 +4,50 @@ require 'thread'
 module RequireFaster
   module PathWatcher
     def self.activate!
+      # $:.uniq! # Dangerous?
       $:.extend(self)
       self
     end
-    class_eval([
+    module_eval([
                  :<<,
+                 :[]=,
+                 :clear,
+                 :compact!,
+                 :concat,
+                 :delete,
+                 :delete_if,
+                 :drop,
+                 :drop_while,
+                 :fill,
+                 :flatten!,
+                 :replace,
+                 :keep_if,
+                 :collect!,
+                 :map!,
+                 :reject!,
+                 :reverse!,
+                 :rotate!,
+                 :select!,
+                 :shuffle!,
+                 :slice!,
+                 :sort!,
+                 :sort_by!,
+                 :uniq!,
                  :unshift,
                  :shift,
                  :push,
                  :pop,
-                 :[]=,
-                 :delete,
-                 :delete_if,
-                 :replace,
                  :insert,
                  :map!,
-               ].map do | name |
+               ].select{|name| $:.respond_to?(name)}.
+               map do | name |
                     <<"END"
 def #{name} *args, &blk
-  $stderr.puts "  # RF: $: #{name} \#{args.inspect}" if DEBUG >= 1
+  RequireFaster._log "$LOAD_PATH changed #{name} \#{args.inspect}" if DEBUG[:path_change]
   Cache.search_path_changed!
-  super(*args, &blk)
+  result = super(*args, &blk)
+  RequireFaster._log "$LOAD_PATH ::\n#{$: * "\n"}" if DEBUG[:path_change_show]
+  result
 end
 END
     end * "\n")
@@ -57,6 +80,7 @@ END
 
     MUTEX_1 = Mutex.new
     def self.invalidate_search_path_cache!
+      instance.search_path_changed!
       THREADS_MUTEX.synchronize do
         dead_threads = [ ]
         THREADS.each do | thread, cache |
@@ -71,13 +95,16 @@ END
       self
     end
 
-    attr_accessor :search_path_version
+    attr_accessor :search_path_version, :path_stack
 
     def initialize
       @cache_find_in_search_path = { }
       @cache_readable_file_ = { }
       @cache_abs_path = { }
+      @path_stack = [ ]
     end
+
+    def depth; @path_stack.size; end
 
     def find_in_search_path name
       (
@@ -89,28 +116,51 @@ END
     end
 
     def _find_in_search_path name
-      $stderr.puts "  # RF: __find_in_search_path #{name.inspect}" if DEBUG >= 2
+      RequireFaster._log "__find_in_search_path #{name.inspect}" if DEBUG[:find_in_search_path]
       case name
+      when %r{\A~}
+        fullpath = try_suffix(File.expand_path(name))
       when %r{\A/}
-        fullpath = name
+        fullpath = try_suffix(name)
       else
         fullpath = nil
         @search_path ||= $:.map{|dir| dir.dup.freeze}.freeze
         @search_path.each do | dir |
           dir = abs_path(dir)
-          SUFFIXES.each do | suf |
-            if readable_file?(try = "#{dir}/#{name}#{suf}")
-              fullpath = try
-              break
-            end
-            $stderr.puts "  # RF: try #{try.inspect}" if DEBUG >= 3
-          end
+          fullpath = try_suffix("#{dir}/#{name}")
           break if fullpath
         end
       end
       fullpath
     end
-    SUFFIXES = [ '', '.rb', '.so' ].map!{|x| x.freeze}.freeze
+
+    SUFFIXES = [ '.rb', '.so' ].map!{|x| x.freeze}.freeze
+    SUFFIXES_RX = SUFFIXES.map{|x| [ x, Regexp.new("#{Regexp.escape(x)}\\Z") ]}.freeze
+    _SUFFIXES = ([ '' ] + SUFFIXES ).map!{|x| x.freeze}.freeze
+
+    def try_suffix path
+      RequireFaster._log "try_suffix #{path.inspect}" if DEBUG[:try_suffix]
+      return path if path =~ /\.so\Z/
+      # If it ends with a suffix, try it.
+      SUFFIXES_RX.each do | suf, suf_rx |
+        if suf_rx.match(path)
+          return try_file path
+        end
+      end
+      # Otherwise, try appending a suffix.
+      SUFFIXES.each do | suf |
+        if path_suf = try_file("#{path}#{suf}")
+          return path_suf
+        end
+      end
+      nil
+    end
+
+    def try_file path
+      return path if readable_file?(try = path)
+      RequireFaster._log "try_file #{path.inspect}" if DEBUG[:try_file]
+      return nil
+    end
 
     def readable_file? path
       (
@@ -119,7 +169,7 @@ END
           (
             s = ::File.stat(path) rescue nil
             x = s && s.file? && s.readable?
-            $stderr.puts "  # RF: readable_file? #{path.inspect} => #{x.inspect}" if DEBUG >= 2
+            RequireFaster._log "readable_file? #{path.inspect} => #{x.inspect}" if DEBUG[:readable_file]
             x
             )
         ]
@@ -130,7 +180,7 @@ END
       @cache_abs_path[path.freeze] ||=
         (
         x = ::File.expand_path(path)
-        $stderr.puts "  # RF: abs_path #{path.inspect} => #{x.inspect}" if DEBUG >= 2
+        RequireFaster._log "abs_path #{path.inspect} => #{x.inspect}" if DEBUG[:abs_path]
         x
         )
     end
@@ -144,7 +194,8 @@ END
     end
 
     def flush_search_path!
-      @find_in_search_path_cache.clear
+      RequireFaster._log "flush_search_path! #{self}\n" if DEBUG[:flush_search_path]
+      @cache_find_in_search_path.clear
       @search_path = nil
       self
     end
